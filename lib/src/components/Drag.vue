@@ -1,6 +1,5 @@
 <template>
-    <component :is="tag" v-bind="$attrs" v-on="$listeners"
-               :class="cssClasses">
+    <component :is="tag" v-bind="$attrs" :class="cssClasses">
         <slot></slot>
         <template v-for="(_, slot) of $scopedSlots" v-slot:[slot]="scope">
             <slot :name="slot" v-bind="scope"/>
@@ -12,19 +11,25 @@
 </template>
 
 <script lang="ts">
-import {Component, Prop} from "vue-property-decorator";
-import DragMixin from "../mixins/DragMixin";
+import { defineComponent } from 'vue';
 
-@Component({})
-export default class Drag extends DragMixin {
+// import useDragMixin from "../mixins/DragMixin";
 
-    /**
-     * Tag to be used as root of this component. Defaults to div.
-     */
-    @Prop({default: 'div', type: [String, Object, Function]})
-    tag: any;
+export default defineComponent({
+  name: 'Drag',
+  props: {
+    tag: {
+      type: [String, Object, Function],
+      default: 'div',
+    },
+  },
+  setup(props) {
+    const { tag } = props;
+    // const {} = useDragMixin();
 
-}
+    return {};
+  },
+});
 </script>
 
 <style lang="scss">

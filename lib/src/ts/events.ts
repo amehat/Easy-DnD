@@ -1,12 +1,12 @@
-import {Vue} from "vue-property-decorator";
+import Vue, { ref } from "vue";
 
 export class DnDEvent {
 
     type: any;
     data: any;
-    top: Vue;
-    previousTop: Vue;
-    source: Vue;
+    top: typeof ref;
+    previousTop: typeof ref;
+    source: typeof ref;
     position: { x, y };
     success: Boolean;
     native: TouchEvent | MouseEvent;
@@ -15,11 +15,7 @@ export class DnDEvent {
 
 export class ReorderEvent {
 
-    constructor(
-        public from: number,
-        public to: number
-    ) {
-    }
+    constructor(public from: number, public to: number) {}
 
     apply(array: any[]) {
         let tmp = array[this.from];
@@ -30,12 +26,9 @@ export class ReorderEvent {
 }
 
 export class InsertEvent {
-
     constructor(
-        public type: any,
+        public type: string,
         public data: any,
         public index: number
-    ) {
-    }
-
+    ) {}
 }

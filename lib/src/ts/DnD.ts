@@ -1,4 +1,5 @@
-import {Vue} from "vue-property-decorator";
+import Vue, { ref } from 'vue';
+import mitt from 'mitt';
 
 /**
  * This is the class of the global object that holds the state of the drag and drop during its progress. It emits events
@@ -8,19 +9,19 @@ import {Vue} from "vue-property-decorator";
 export class DnD {
 
     public inProgress = false;
-    public type: any = null;
+    public type: string = null;
     public data: any = null;
-    public source: Vue = null;
-    public top: Vue = null;
+    public source: typeof ref = null;
+    public top: typeof ref = null;
     public position: { x: number, y: number } = null;
-    private eventBus = new Vue();
+    private eventBus = mitt();
     public sourceListeners = null;
     public success: Boolean = null;
 
     constructor() {
     }
 
-    public startDrag(source: Vue, event: MouseEvent | TouchEvent, x, y, type, data) {
+    public startDrag(source: typeof ref, event: MouseEvent | TouchEvent, x: number, y: number, type: string, data) {
         this.type = type;
         this.data = data;
         this.source = source;
@@ -29,7 +30,10 @@ export class DnD {
             y
         };
         this.top = null;
-        this.sourceListeners = source.$listeners;
+        this.sourceListeners = {
+          emit: this.eventBus.emit,
+          mode: 'copy',
+        };
         this.inProgress = true;
         this.emit(event, "dragstart");
         this.emit(event, "dragtopchanged", {previousTop: null});
@@ -48,7 +52,7 @@ export class DnD {
         this.success = null;
     }
 
-    public mouseMove(event, comp: Vue) {
+    public mouseMove(event, comp) {
         if (this.inProgress) {
             let prevent = false;
             let previousTop = this.top;
@@ -81,7 +85,7 @@ export class DnD {
     }
 
     private emit(native, event, data?) {
-        this.eventBus.$emit(event, {
+        this.eventBus.emit(event, {
             type: this.type,
             data: this.data,
             top: this.top,
@@ -94,14 +98,14 @@ export class DnD {
     }
 
     public on(event, callback) {
-        this.eventBus.$on(event, callback);
+        this.eventBus.on(event, callback);
     }
 
     public off(event, callback) {
-        this.eventBus.$off(event, callback);
+        this.eventBus.off(event, callback);
     }
 
 }
 
 export let dnd = new DnD();
-dnd = Vue.observable(dnd);
+Vue.reactive(dnd);

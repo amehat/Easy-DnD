@@ -11,20 +11,33 @@
 </template>
 
 <script lang="ts">
-import {Component, Prop} from "vue-property-decorator";
-import DropMixin from "../mixins/DropMixin";
+import { defineComponent, computed } from "vue";
 
-@Component({})
-export default class Drop extends DropMixin {
+import useDropMixin from "../mixins/DropMixin";
 
-    @Prop({default: 'div', type: [String, Object, Function]})
-    tag: any;
+export default defineComponent({
+  name: 'Drop',
+  props: {
+    tag: {
+      type: [String, Object, Function],
+      default: 'div',
+    },
+  },
+  setup(props) {
+    const { tag } = props;
+    const { dragInProgress, typeAllowed, } = useDropMixin();
 
-    get showDragImage() {
-        return this.dragInProgress && this.typeAllowed && this.$scopedSlots['drag-image'];
-    }
+    const showDragImage = computed(() => {
+      // return dragInProgress && typeAllowed && $scopedSlots['drag-image'];
+      return dragInProgress && typeAllowed;
+    });
 
-}
+    return {
+      showDragImage,
+      tag,
+    };
+  }
+});
 </script>
 
 <style lang="scss">

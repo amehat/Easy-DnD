@@ -1,139 +1,152 @@
-import {Component, Vue} from "vue-property-decorator";
-import {dnd} from "./DnD";
+import { defineComponent, nextTick, ref } from "vue";
+
+import { dnd } from "./DnD";
 
 /**
  * This class reacts to drag events emitted by the dnd object to manage a sequence of drag images and fade from one to the
  * other as the drag progresses.
  */
-@Component({}) // Necessary to set proper "this" context in event listeners.
-export class DragImagesManager extends Vue {
+export default defineComponent({
+  name: 'DragImagesManager',
+  props: {},
+  emits: [],
+  setup(props, context) {
+    let selfTransform: string = null;
+    let clones: Map<typeof ref, HTMLElement> = null;
+    let source: typeof ref = null;
+    let sourcePos: { x: number, y: number } = null;
+    let sourceClone: HTMLElement = null;
 
-    selfTransform: string = null;
-    clones: Map<Vue, HTMLElement> = null;
-    source: Vue = null;
-    sourcePos: { x: number, y: number } = null;
-    sourceClone: HTMLElement = null;
+    const { emit } = context;
 
-    constructor() {
-        super();
-        dnd.on('dragstart', this.onDragStart);
-        dnd.on('dragtopchanged', this.onDragTopChanged);
-        dnd.on('dragpositionchanged', this.onDragPositionChanged);
-        dnd.on('dragend', this.onDragEnd);
-    }
+    const switchClone = function (top) {
+      clones.forEach(clone => {
+        clone.style.opacity = "0";
+      });
+      if (this.sourceClone) {
+        sourceClone.style.opacity = "0";
+      }
 
-    onDragStart(event) {
-        this.sourcePos = {
-            x: event.source.$el.getBoundingClientRect().left,
-            y: event.source.$el.getBoundingClientRect().top
-        };
-        this.selfTransform = "translate(-" + (event.position.x - this.sourcePos.x) + "px, -" + (event.position.y - this.sourcePos.y) + "px)";
-        this.clones = new Map<Vue, HTMLElement>();
-        this.source = event.source;
-    }
+      let activeClone;
+      if (top === null) {
+        activeClone = getSourceClone();
+      } else {
+        if (!clones.has(top)) {
+          let clone = top['createDragImage'](selfTransform);
+          if (clone === 'source') {
+            clone = getSourceClone();
+          } else if (clone !== null) {
+            clone.style.opacity = '0';
+            document.body.appendChild(clone);
+          }
+          clones.set(top, clone);
+        }
+        activeClone = clones.get(top);
+      }
 
-    onDragEnd(event) {
-        Vue.nextTick(() => {
-            if (!event.success && this.source['goBack']) {
-                // Restore the drag image that is active when hovering outside any drop zone :
-                let img = this.switch(null) as HTMLElement;
+      if (activeClone !== null) {
+        activeClone.offsetWidth; // Forces broswer reflow
+        activeClone.style.opacity = activeClone['__opacity'];
+        activeClone.style.visibility = 'visible';
+      }
 
-                // Move it back to its original place :
-                window.requestAnimationFrame(() => {
-                    img.style.transition = "all 0.5s";
-                    window.requestAnimationFrame(() => {
-                        img.style.left = this.sourcePos.x + "px";
-                        img.style.top = this.sourcePos.y + "px";
-                        img.style.transform = "translate(0,0)";
-                        let handler = () => {
-                            this.cleanUp();
-                            img.removeEventListener("transitionend", handler);
-                        };
-                        img.addEventListener("transitionend", handler);
-                    })
-                })
-            } else {
+      return activeClone;
+    };
+
+    const onDragStart = function (event) {
+      sourcePos = {
+        x: event.source.$el.getBoundingClientRect().left,
+        y: event.source.$el.getBoundingClientRect().top,
+      };
+      selfTransform = "translate(-" + (event.position.x - this.sourcePos.x) + "px, -" + (event.position.y - sourcePos.y) + "px)";
+      clones = new Map<typeof ref, HTMLElement>();
+      source = event.source;
+    };
+
+    const onDragEnd = function (event) {
+      nextTick(() => {
+        if (!event.success && this.source['goBack']) {
+          // Restore the drag image that is active when hovering outside any drop zone :
+          let img = switchClone(null) as HTMLElement;
+
+          // Move it back to its original place :
+          window.requestAnimationFrame(() => {
+            img.style.transition = "all 0.5s";
+            window.requestAnimationFrame(() => {
+              img.style.left = sourcePos.x + "px";
+              img.style.top = sourcePos.y + "px";
+              img.style.transform = "translate(0,0)";
+              let handler = () => {
                 this.cleanUp();
-            }
-        });
-    }
-
-    cleanUp() {
-        this.clones.forEach((clone) => {
-            if (clone.parentNode === document.body) {
-                document.body.removeChild(clone);
-            }
-        });
-        if (this.sourceClone !== null) {
-            if (this.sourceClone.parentNode === document.body) {
-                document.body.removeChild(this.sourceClone);
-            }
-        }
-        this.selfTransform = null;
-        this.clones = null;
-        this.source = null;
-        this.sourceClone = null;
-        this.sourcePos = null;
-    }
-
-    onDragTopChanged(event) {
-        this.switch(event.top);
-    }
-
-    switch(top) {
-        this.clones.forEach(clone => {
-            clone.style.opacity = "0";
-        });
-        if (this.sourceClone) {
-            this.sourceClone.style.opacity = "0";
-        }
-
-        let activeClone;
-        if (top === null) {
-            activeClone = this.getSourceClone();
+                img.removeEventListener("transitionend", handler);
+              };
+              img.addEventListener("transitionend", handler);
+            })
+          })
         } else {
-            if (!this.clones.has(top)) {
-                let clone = top['createDragImage'](this.selfTransform);
-                if (clone === 'source') {
-                    clone = this.getSourceClone();
-                } else if (clone !== null) {
-                    clone.style.opacity = '0';
-                    document.body.appendChild(clone);
-                }
-                this.clones.set(top, clone);
-            }
-            activeClone = this.clones.get(top);
+          cleanUp();
         }
+      });
+    };
 
-        if (activeClone !== null) {
-            activeClone.offsetWidth; // Forces broswer reflow
-            activeClone.style.opacity = activeClone['__opacity'];
-            activeClone.style.visibility = 'visible';
+    const cleanUp = function () {
+      clones.forEach((clone) => {
+        if (clone.parentNode === document.body) {
+          document.body.removeChild(clone);
         }
+      });
+      if (sourceClone !== null) {
+        if (sourceClone.parentNode === document.body) {
+          document.body.removeChild(this.sourceClone);
+        }
+      }
+      selfTransform = null;
+      clones = null;
+      source = null;
+      sourceClone = null;
+      sourcePos = null;
+    };
 
-        return activeClone;
-    }
+    const onDragTopChanged = function (event) {
+      switchClone(event.top);
+    };
 
-    getSourceClone() {
-        if (this.sourceClone === null) {
-            this.sourceClone = this.source['createDragImage'](this.selfTransform);
-            this.sourceClone.style.opacity = '0';
-            document.body.appendChild(this.sourceClone);
+    const getSourceClone = function () {
+        if (sourceClone === null) {
+            sourceClone = this.source['createDragImage'](selfTransform);
+            sourceClone.style.opacity = '0';
+            document.body.appendChild(sourceClone);
         }
         return this.sourceClone;
+    };
+
+    const onDragPositionChanged = function (event) {
+      clones.forEach((clone) => {
+        clone.style.left = dnd.position.x + "px";
+        clone.style.top = dnd.position.y + "px";
+      });
+      if (sourceClone) {
+        sourceClone.style.left = dnd.position.x + "px";
+        sourceClone.style.top = dnd.position.y + "px";
+      }
     }
 
-    onDragPositionChanged(event) {
-        this.clones.forEach((clone) => {
-            clone.style.left = dnd.position.x + "px";
-            clone.style.top = dnd.position.y + "px";
-        });
-        if (this.sourceClone) {
-            this.sourceClone.style.left = dnd.position.x + "px";
-            this.sourceClone.style.top = dnd.position.y + "px";
-        }
-    }
+    dnd.on('dragstart', onDragStart);
+    dnd.on('dragtopchanged', onDragTopChanged);
+    dnd.on('dragpositionchanged', onDragPositionChanged);
+    dnd.on('dragend', onDragEnd);
+    
+    return {
+      cleanUp,
+      getSourceClone,
+      onDragEnd,
+      onDragStart,
+      onDragTopChanged,
+      onDragPositionChanged,
+      switchClone,
+    };
+  }
+});
 
-}
-
-new DragImagesManager();
+// TODO: instancier le composant
+// DragImagesManager();

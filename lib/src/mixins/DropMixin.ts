@@ -1,183 +1,233 @@
 import {Component, Prop, Vue} from "vue-property-decorator";
-import DragAwareMixin from "./DragAwareMixin";
-import {createDragImage} from "../ts/createDragImage";
-import {DnDEvent} from "../ts/events";
-import {dnd} from "../ts/DnD";
+import { computed, defineComponent, onMounted, ref } from 'vue';
 
-@Component({})
-export default class DropMixin extends DragAwareMixin {
+import useDragAwareMixin from "./DragAwareMixin";
+import { createDragImage as useCreateDragImage } from "../ts/createDragImage";
+import { DnDEvent } from "../ts/events";
+import { dnd } from "../ts/DnD";
 
-    isDrop = true;
+export default ({
+  name: 'DropMixin',
+  props: {
+    acceptsType: {
+      type: [String, Array, Function],
+      default: () => () => true,
+    },
+    acceptsData: {
+      type: Function,
+      default: () => true,
+    },
+    mode: {
+      type: String,
+      default: 'copy',
+    },
+    dragImageOpacity: {
+      type: Number,
+      default: 0.7,
+    },
+  },
+  emits: [
+    'copy',
+    'dragover',
+    'dragenter',
+    'dragleave',
+    'dragenter',
+    'drop'
+  ],
+  setup(props, { emit }) {
+    const {
+      dragData,
+      dragInProgress,
+      dragTop,
+      dragType,
+    } = useDragAwareMixin();
+    const {
+      acceptsType,
+      acceptsData,
+      mode,
+      dragImageOpacity,
+    } = props;
+    const root = ref(null);
 
-    @Prop({default: () => () => true, type: [String, Array, Function]})
-    acceptsType: string | string[] | { (type: any): boolean };
+    let isDrop = true;
+    let $el = null;
+    let el = $el;
+    let comp = ref();
 
-    @Prop({default: () => true, type: Function})
-    acceptsData: { (data: any, type: string): boolean };
-
-    @Prop({default: 'copy'})
-    mode: string;
-
-    @Prop({default: 0.7, type: Number})
-    dragImageOpacity: any;
-
-    constructor() {
-        super();
+    const onMouseMove = function (e) {
+      dnd.mouseMove(e, comp);
     }
 
-    effectiveAcceptsType(type: string) {
-        if (this.acceptsType === null)
-            return true;
-        else if (typeof (this.acceptsType) === 'string')
-            return this.acceptsType === type;
-        else if (typeof (this.acceptsType) === 'object' && Array.isArray(this.acceptsType)) {
-            return this.acceptsType.includes(type);
+    el.addEventListener('easy-dnd-move', onMouseMove);
+
+    const compatibleMode = computed(() => {
+      if (dragInProgress) {
+        return mode === 'copy' || dnd.sourceListeners.hasOwnProperty(mode);
+      } else {
+        return null;
+      }
+    });
+
+    const dropIn = computed(() => {
+      if (dragInProgress) {
+        return dragTop === ref();
+      } else {
+        return null;
+      }
+    });
+
+    const typeAllowed = computed(() => {
+      if (dragInProgress) {
+        return effectiveAcceptsType(dragType.value);
+      } else {
+        return null;
+      }
+    });
+
+    const dropAllowed = computed(() => {
+      if (dragInProgress) {
+        if (typeAllowed) {
+          return compatibleMode && effectiveAcceptsData(dragData.value, dragType.value);
         } else {
-            return this.acceptsType(type);
+          return null;
         }
-    }
+      } else {
+        return null;
+      }
+    });
 
-    effectiveAcceptsData(data: any, type: any) {
-        return this.acceptsData(data, type);
-    }
+    const cssClasses = computed(() => {
+      let clazz = {
+        'dnd-drop': true
+      } as any;
+      if (dropIn !== null) {
+        clazz = {
+          ...clazz,
+          "drop-in": dropIn,
+          "drop-out": !dropIn
+        };
+      }
+      if (typeAllowed !== null) {
+        clazz = {
+          ...clazz,
+          "type-allowed": typeAllowed,
+          "type-forbidden": !typeAllowed
+        };
+      }
+      if (dropAllowed !== null) {
+        clazz = {
+          ...clazz,
+          "drop-allowed": dropAllowed,
+          "drop-forbidden": !dropAllowed
+        };
+      }
+      return clazz;
+    });
 
-    created() {
-        dnd.on("dragpositionchanged", this.onDragPositionChanged);
-        dnd.on("dragtopchanged", this.onDragTopChanged);
-        dnd.on("drop", this.onDrop);
-    }
+    const cssStyle = computed(() => {
+      return {};
+    });
 
-    destroyed() {
-        dnd.off("dragpositionchanged", this.onDragPositionChanged);
-        dnd.off("dragtopchanged", this.onDragTopChanged);
-        dnd.off("drop", this.onDrop);
-    }
+    const effectiveAcceptsType = function (type: string) {
+      if (acceptsType === null) {
+        return true;
+      } else if (typeof (acceptsType) === 'string') {
+        return acceptsType === type;
+      } else if (typeof (acceptsType) === 'object' && Array.isArray(acceptsType)) {
+        return acceptsType.includes(type);
+      } else {
+        return acceptsType(type);
+      }
+    };
 
-    onDragPositionChanged(event: DnDEvent) {
-        if (this === event.top) {
-            this.$emit("dragover", event);
-        }
-    }
-
-    onDragTopChanged(event: DnDEvent) {
-        if (this === event.top) {
-            this.$emit("dragenter", event);
-        }
-        if (this === event.previousTop) {
-            this.$emit("dragleave", event);
-        }
-    }
-
-    onDrop(event: DnDEvent) {
-        if (this.dropIn && this.compatibleMode && this.dropAllowed) {
-            this.doDrop(event);
-        }
-    }
-
-    doDrop(event: DnDEvent) {
-        this.$emit('drop', event);
-        event.source.$emit(this.mode, event);
-    }
-
-    mounted() {
-        let el = this.$el;
-        let comp = this;
-        el.addEventListener('easy-dnd-move', onMouseMove);
-
-        function onMouseMove(e) {
-            dnd.mouseMove(e, comp);
-        }
-    }
-
-    get compatibleMode() {
-        if (this.dragInProgress) {
-            return this.mode === 'copy' || dnd.sourceListeners.hasOwnProperty(this.mode);
-        } else {
-            return null;
-        }
-    }
-
-    get dropIn() {
-        if (this.dragInProgress) {
-            return this.dragTop === this;
-        } else {
-            return null;
-        }
-    }
-
-    get typeAllowed() {
-        if (this.dragInProgress) {
-            return this.effectiveAcceptsType(this.dragType);
-        } else {
-            return null;
-        }
-    }
-
-    get dropAllowed() {
-        if (this.dragInProgress) {
-            if (this.typeAllowed) {
-                return this.compatibleMode && this.effectiveAcceptsData(this.dragData, this.dragType);
-            } else {
-                return null;
-            }
-        } else {
-            return null;
-        }
-    }
-
-    get cssClasses() {
-        let clazz = {
-            'dnd-drop': true
-        } as any;
-        if (this.dropIn !== null) {
-            clazz = {
-                ...clazz,
-                "drop-in": this.dropIn,
-                "drop-out": !this.dropIn
-            };
-        }
-        if (this.typeAllowed !== null) {
-            clazz = {
-                ...clazz,
-                "type-allowed": this.typeAllowed,
-                "type-forbidden": !this.typeAllowed
-            };
-        }
-        if (this.dropAllowed !== null) {
-            clazz = {
-                ...clazz,
-                "drop-allowed": this.dropAllowed,
-                "drop-forbidden": !this.dropAllowed
-            };
-        }
-        return clazz;
-    }
-
-    get cssStyle() {
-        return {};
-    }
+    const effectiveAcceptsData = function (data: any, type: any) {
+      return acceptsData(data, type);
+    };
 
     /**
      * Returns true if the current drop area participates in the current drag operation.
      */
-    candidate(type: any, data: any, source: Vue) {
-        return this.effectiveAcceptsType(type);
-    }
+    const candidate = function (type: string) {
+      return effectiveAcceptsType(type);
+    };
 
-    createDragImage() {
-        let image;
-        if (this.$refs['drag-image']) {
-            let el = this.$refs['drag-image'] as HTMLElement;
-            if (el.childElementCount !== 1) {
-                image = createDragImage(el);
-            } else {
-                image = createDragImage(el.children.item(0) as HTMLElement);
-            }
-            image['__opacity'] = this.dragImageOpacity;
+    const createDragImage = function () {
+      let image;
+      if (this.$refs['drag-image']) {
+        let el = this.$refs['drag-image'] as HTMLElement;
+        if (el.childElementCount !== 1) {
+          image = useCreateDragImage(el);
         } else {
-            image = 'source';
+          image = useCreateDragImage(el.children.item(0) as HTMLElement);
         }
-        return image;
+        image['__opacity'] = dragImageOpacity;
+      } else {
+        image = 'source';
+      }
+      return image;
+    };
+
+    const created = function () {
+      dnd.on("dragpositionchanged", onDragPositionChanged);
+      dnd.on("dragtopchanged", onDragTopChanged);
+      dnd.on("drop", onDrop);
+    };
+
+    const destroyed = function () {
+      dnd.off("dragpositionchanged", onDragPositionChanged);
+      dnd.off("dragtopchanged", onDragTopChanged);
+      dnd.off("drop", onDrop);
+    };
+
+    const onDragPositionChanged = function (event: DnDEvent) {
+      if (this === event.top) {
+        emit("dragover", event);
+      }
+    };
+    
+    const onDragTopChanged = function (event: DnDEvent) {
+      if (this === event.top) {
+        emit("dragenter", event);
+      }
+      if (this === event.previousTop) {
+        emit("dragleave", event);
+      }
+    };
+
+    const onDrop = function (event: DnDEvent) {
+      if (dropIn && this.compatibleMode && dropAllowed) {
+        doDrop(event);
+      }
+    };
+
+    const doDrop = function (event: DnDEvent) {
+      emit('drop', event);
+      // event.source.emit(mode, event);
+      // TODO: pour test, à changer
+      emit(mode === 'copy' ? mode : 'copy', event);
     }
 
-}
+    onMounted(() => {
+      $el = root.value;
+    });
+
+    return {
+      candidate,
+      compatibleMode,
+      createDragImage,
+      created,
+      cssClasses,
+      cssStyle,
+      destroyed,
+      dropAllowed,
+      dropIn,
+      effectiveAcceptsType,
+      effectiveAcceptsData,
+      onDragPositionChanged,
+      onDragTopChanged,
+      onDrop,
+      doDrop,
+      typeAllowed,
+    };
+  }
+})
